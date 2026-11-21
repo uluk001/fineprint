@@ -181,7 +181,7 @@ export async function mountApp(opts: AppOptions): Promise<void> {
       ...list('Ask before you sign', r.questionsToAsk),
       ...list('Protections that may be missing', r.missingProtections),
       ...list('What to negotiate', r.negotiationTips),
-      h('div', { class: 'fp-note', style: 'margin-top:8px' }, `Sent ${r.sentChars.toLocaleString()} characters to Gemini in the cloud${r.redactions ? `, ${r.redactions} personal details redacted` : ''}.`),
+      h('div', { class: 'fp-note', style: 'margin-top:8px' }, `Sent ${r.sentChars.toLocaleString()} characters to Gemini in the cloud${r.redactions ? `, ${r.redactions} personal details redacted` : ''}. ${(r.ms / 1000).toFixed(1)}s.`),
     );
   }
 

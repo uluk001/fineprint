@@ -51,6 +51,7 @@ export interface DeepReport {
   source: Source;
   sentChars: number;
   redactions: number;
+  ms: number;
 }
 
 export type DeepScope = 'flagged' | 'full';

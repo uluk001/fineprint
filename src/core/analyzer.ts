@@ -1,4 +1,4 @@
-import { getGenerativeModel, InferenceMode, type GenerativeModel } from 'firebase/ai';
+import { getGenerativeModel, InferenceMode, ThinkingLevel, type GenerativeModel } from 'firebase/ai';
 import { initFirebase, loadSettings, type AppSettings } from './firebase.ts';
 import { chunkText, groundQuote, dedupeFindings, redactPII, buildFlaggedExcerpts } from './text.ts';
 import type { Category, DeepReport, DeepScope, Finding, ScanProgress, ScanResult, Severity, Source } from './types.ts';
@@ -147,7 +147,12 @@ async function ensureModels(debugToken?: string): Promise<AppSettings> {
       inCloudParams: {
         model: settings.scanCloudModel,
         systemInstruction: instruction,
-        generationConfig: { responseMimeType: 'application/json', responseJsonSchema: schema, temperature: 0.1 },
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseJsonSchema: schema,
+          temperature: 0.1,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+        },
       },
     });
     // Deep analysis is cloud-only by design and runs only after explicit consent.
@@ -156,7 +161,12 @@ async function ensureModels(debugToken?: string): Promise<AppSettings> {
       inCloudParams: {
         model: settings.deepModel,
         systemInstruction: DEEP_INSTRUCTION,
-        generationConfig: { responseMimeType: 'application/json', responseJsonSchema: deepSchema, temperature: 0.3 },
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseJsonSchema: deepSchema,
+          temperature: 0.3,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        },
       },
     });
     deepFallbackModel = getGenerativeModel(ai, {
@@ -164,7 +174,12 @@ async function ensureModels(debugToken?: string): Promise<AppSettings> {
       inCloudParams: {
         model: settings.scanCloudModel,
         systemInstruction: DEEP_INSTRUCTION,
-        generationConfig: { responseMimeType: 'application/json', responseJsonSchema: deepSchema, temperature: 0.3 },
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseJsonSchema: deepSchema,
+          temperature: 0.3,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        },
       },
     });
     currentSettings = settings;
@@ -278,6 +293,7 @@ export interface DeepOptions {
 }
 
 export async function deepAnalysis(text: string, findings: Finding[], opts: DeepOptions): Promise<DeepReport> {
+  const started = performance.now();
   await ensureModels(opts.debugToken);
   let payload =
     opts.scope === 'full'
@@ -298,7 +314,7 @@ export async function deepAnalysis(text: string, findings: Finding[], opts: Deep
     () => deepModel!.generateContent(prompt),
     () => deepFallbackModel!.generateContent(prompt),
   );
-  const parsed = parseJson<Omit<DeepReport, 'source' | 'sentChars' | 'redactions'>>(res.response.text());
+  const parsed = parseJson<Omit<DeepReport, 'source' | 'sentChars' | 'redactions' | 'ms'>>(res.response.text());
   if (!parsed) throw new Error('The cloud model returned an unreadable answer. Please try again.');
   return {
     riskLevel: parsed.riskLevel ?? 'medium',
@@ -310,6 +326,7 @@ export async function deepAnalysis(text: string, findings: Finding[], opts: Deep
     source: (res.response.inferenceSource as Source) ?? 'in_cloud',
     sentChars: payload.length,
     redactions,
+    ms: Math.round(performance.now() - started),
   };
 }
 
