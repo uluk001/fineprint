@@ -108,6 +108,7 @@ let deepModel: GenerativeModel | null = null;
 let deepFallbackModel: GenerativeModel | null = null;
 
 const TRANSIENT = /\b(429|500|503)\b|high demand|overloaded|unavailable|RESOURCE_EXHAUSTED/i;
+const TIMEOUT = /timed? ?out|timeout|AbortError|aborted/i;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Cloud models can be briefly overloaded: retry once, then fall back to a lighter model. */
@@ -115,7 +116,13 @@ async function withCloudRetry<T>(primary: () => Promise<T>, fallback?: () => Pro
   try {
     return await primary();
   } catch (e) {
-    if (!TRANSIENT.test(String((e as Error)?.message ?? e))) throw e;
+    const msg = String((e as Error)?.message ?? e) + String((e as Error)?.name ?? '');
+    // A slow primary model is not worth a second wait: go straight to the lighter model.
+    if (fallback && TIMEOUT.test(msg)) {
+      console.warn('[FinePrint] primary cloud model too slow, using fallback model');
+      return await fallback();
+    }
+    if (!TRANSIENT.test(msg)) throw e;
     await sleep(1500);
     try {
       return await primary();
@@ -320,8 +327,8 @@ export async function deepAnalysis(text: string, findings: Finding[], opts: Deep
       : `FLAGGED CLAUSES ONLY (${findings.length} found on-device; the rest of the document was not shared):`;
   const prompt = `${header}\n"""\n${payload}\n"""`;
   const res = await withCloudRetry(
-    () => deepModel!.generateContent(prompt),
-    () => deepFallbackModel!.generateContent(prompt),
+    () => deepModel!.generateContent(prompt, { timeout: 25000 }),
+    () => deepFallbackModel!.generateContent(prompt, { timeout: 60000 }),
   );
   const parsed = parseJson<Omit<DeepReport, 'source' | 'sentChars' | 'redactions' | 'ms'>>(res.response.text());
   if (!parsed) throw new Error('The cloud model returned an unreadable answer. Please try again.');
