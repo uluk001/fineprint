@@ -1,0 +1,29 @@
+{
+  "parameters": {
+    "chunk_chars": {
+      "defaultValue": { "value": "2800" },
+      "description": "Max characters per fragment sent to Gemini Nano (must fit its context window).",
+      "valueType": "NUMBER"
+    },
+    "max_chunks": {
+      "defaultValue": { "value": "14" },
+      "description": "How many fragments of a long document are scanned.",
+      "valueType": "NUMBER"
+    },
+    "scan_cloud_model": {
+      "defaultValue": { "value": "gemini-3.5-flash-lite" },
+      "description": "Cloud model used only when on-device scanning is unavailable.",
+      "valueType": "STRING"
+    },
+    "deep_model": {
+      "defaultValue": { "value": "gemini-3.5-flash" },
+      "description": "Cloud model for the opt-in deep analysis.",
+      "valueType": "STRING"
+    },
+    "risk_categories": {
+      "defaultValue": { "value": "[see src/core/categories.ts]" },
+      "description": "JSON array of {id,label,hint}. Lets us add risk types (e.g. a new regulation) without a new extension release.",
+      "valueType": "JSON"
+    }
+  }
+}

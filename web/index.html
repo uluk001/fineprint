@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fine Print: read the terms before they read you</title>
+    <meta name="description" content="Hybrid AI that flags risky clauses in insurance policies, loan agreements and subscription terms. Private on-device scan with Gemini Nano, opt-in cloud deep review." />
+    <link rel="icon" href="/icon128.png" />
+  </head>
+  <body class="web">
+    <div class="web-layout">
+      <section class="web-doc">
+        <div class="web-doc-head">
+          <div>
+            <div class="web-doc-title" id="doc-title">Paste terms or pick a sample</div>
+            <div class="fp-meta">The text stays in this browser unless you start a cloud deep analysis.</div>
+          </div>
+          <select id="sample"></select>
+        </div>
+        <textarea id="doc" spellcheck="false" placeholder="Paste an insurance policy, loan agreement or subscription terms here..."></textarea>
+        <div id="preview" class="web-preview hidden"></div>
+        <div class="web-doc-actions">
+          <button id="edit" class="fp-btn secondary hidden">Edit text</button>
+        </div>
+      </section>
+      <aside class="web-panel" id="app"></aside>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
