@@ -58,7 +58,7 @@ Live demo: https://uluk001.github.io/fineprint/
 4. Click a finding to jump to it in the document. Run **Deep analysis** to get the cloud review.
 
 ### Chrome extension
-1. Download the latest `fineprint-extension.zip` from Releases, unzip it.
+1. Download [`release/fineprint-extension.zip`](release/fineprint-extension.zip) and unzip it (or build it yourself, see below).
 2. Open `chrome://extensions`, enable Developer mode, click **Load unpacked** and select the folder.
 3. Open any terms of service, policy wording or loan agreement page and click the Fine Print icon.
 4. The side panel scans on-device with Gemini Nano. If Nano is not ready, or when you start a deep analysis, it uses Gemini in the cloud through the cloud bridge, with no setup.

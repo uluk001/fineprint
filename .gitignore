@@ -1,6 +1,6 @@
 node_modules/
 dist/
-*.zip
+dist/*.zip
 .env.local
 .env.*.local
 .DS_Store
