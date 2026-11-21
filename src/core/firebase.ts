@@ -28,7 +28,7 @@ export interface AppSettings {
 
 const DEFAULTS: AppSettings = {
   categories: DEFAULT_CATEGORIES,
-  chunkChars: 2800,
+  chunkChars: 1800,
   maxChunks: 14,
   deepModel: 'gemini-3.5-flash',
   scanCloudModel: 'gemini-3.5-flash-lite',

@@ -31,11 +31,12 @@ function scanInstruction(categories: Category[]): string {
     'You read ONE fragment of terms and conditions: an insurance policy, a loan or credit agreement, or a subscription contract.',
     'Find clauses that can cost the reader money, rights, coverage or privacy.',
     'For each risky clause return:',
-    '- "quote": an EXACT copy of the clause text from the fragment, 40 to 220 characters, copied word for word.',
+    '- "quote": an EXACT copy of the clause text from the fragment, 40 to 180 characters, copied word for word.',
     '- "category": one id from the list below.',
     '- "severity": "high" (likely to cost money or deny a claim), "medium" (notable restriction) or "low" (worth knowing).',
-    '- "explanation": one short sentence in plain English, addressed to the reader ("You..."), saying why it matters.',
-    'Only flag clauses that are really in the fragment. Ignore headings, navigation and marketing text.',
+    '- "explanation": one plain-English sentence of at most 20 words, written to the reader in the second person, saying what it could cost them.',
+    'Pay special attention to exclusions (what is NOT covered), fees, deadlines, automatic charges, data sharing, arbitration and limits on what the provider pays.',
+    'Only flag clauses that are really in the fragment. Ignore headings, navigation, contact details and marketing text.',
     'If nothing is risky, return an empty "findings" list.',
     'Categories:',
     ...categories.map((c) => `- ${c.id}: ${c.hint}`),
@@ -48,7 +49,7 @@ function scanSchema(categories: Category[]) {
     properties: {
       findings: {
         type: 'array',
-        maxItems: 6,
+        maxItems: 5,
         items: {
           type: 'object',
           properties: {
@@ -102,6 +103,27 @@ const DEEP_INSTRUCTION = [
 
 let scanModel: GenerativeModel | null = null;
 let deepModel: GenerativeModel | null = null;
+let deepFallbackModel: GenerativeModel | null = null;
+
+const TRANSIENT = /\b(429|500|503)\b|high demand|overloaded|unavailable|RESOURCE_EXHAUSTED/i;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Cloud models can be briefly overloaded: retry once, then fall back to a lighter model. */
+async function withCloudRetry<T>(primary: () => Promise<T>, fallback?: () => Promise<T>): Promise<T> {
+  try {
+    return await primary();
+  } catch (e) {
+    if (!TRANSIENT.test(String((e as Error)?.message ?? e))) throw e;
+    await sleep(1500);
+    try {
+      return await primary();
+    } catch (e2) {
+      if (!fallback || !TRANSIENT.test(String((e2 as Error)?.message ?? e2))) throw e2;
+      console.warn('[FinePrint] primary cloud model busy, using fallback model');
+      return await fallback();
+    }
+  }
+}
 let currentSettings: AppSettings | null = null;
 
 async function ensureModels(debugToken?: string): Promise<AppSettings> {
@@ -133,6 +155,14 @@ async function ensureModels(debugToken?: string): Promise<AppSettings> {
       mode: InferenceMode.ONLY_IN_CLOUD,
       inCloudParams: {
         model: settings.deepModel,
+        systemInstruction: DEEP_INSTRUCTION,
+        generationConfig: { responseMimeType: 'application/json', responseJsonSchema: deepSchema, temperature: 0.3 },
+      },
+    });
+    deepFallbackModel = getGenerativeModel(ai, {
+      mode: InferenceMode.ONLY_IN_CLOUD,
+      inCloudParams: {
+        model: settings.scanCloudModel,
         systemInstruction: DEEP_INSTRUCTION,
         generationConfig: { responseMimeType: 'application/json', responseJsonSchema: deepSchema, temperature: 0.3 },
       },
@@ -195,7 +225,8 @@ export async function scanDocument(text: string, opts: ScanOptions = {}): Promis
     let source: Source = 'on_device';
     let raw: RawFinding[] = [];
     try {
-      const res = await scanModel!.generateContent(`Fragment ${i + 1} of ${chunks.length}:\n"""\n${chunk}\n"""`);
+      const prompt = `Fragment ${i + 1} of ${chunks.length}:\n"""\n${chunk}\n"""`;
+      const res = await withCloudRetry(() => scanModel!.generateContent(prompt));
       source = (res.response.inferenceSource as Source) ?? 'in_cloud';
       const parsed = parseJson<{ findings?: RawFinding[] }>(res.response.text());
       raw = parsed?.findings ?? [];
@@ -262,7 +293,11 @@ export async function deepAnalysis(text: string, findings: Finding[], opts: Deep
     opts.scope === 'full'
       ? 'FULL DOCUMENT:'
       : `FLAGGED CLAUSES ONLY (${findings.length} found on-device; the rest of the document was not shared):`;
-  const res = await deepModel!.generateContent(`${header}\n"""\n${payload}\n"""`);
+  const prompt = `${header}\n"""\n${payload}\n"""`;
+  const res = await withCloudRetry(
+    () => deepModel!.generateContent(prompt),
+    () => deepFallbackModel!.generateContent(prompt),
+  );
   const parsed = parseJson<Omit<DeepReport, 'source' | 'sentChars' | 'redactions'>>(res.response.text());
   if (!parsed) throw new Error('The cloud model returned an unreadable answer. Please try again.');
   return {

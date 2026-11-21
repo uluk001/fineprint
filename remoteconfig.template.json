@@ -1,7 +1,7 @@
 {
   "parameters": {
     "chunk_chars": {
-      "defaultValue": { "value": "2800" },
+      "defaultValue": { "value": "1800" },
       "description": "Max characters per fragment sent to Gemini Nano (must fit its context window).",
       "valueType": "NUMBER"
     },
