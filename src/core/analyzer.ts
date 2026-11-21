@@ -102,6 +102,8 @@ const DEEP_INSTRUCTION = [
 ].join('\n');
 
 let scanModel: GenerativeModel | null = null;
+let deviceScanModel: GenerativeModel | null = null;
+let cloudScanModel: GenerativeModel | null = null;
 let deepModel: GenerativeModel | null = null;
 let deepFallbackModel: GenerativeModel | null = null;
 
@@ -134,27 +136,31 @@ async function ensureModels(debugToken?: string): Promise<AppSettings> {
     const instruction = scanInstruction(settings.categories);
     // Hybrid: prefer Gemini Nano on the device; if it is missing or still downloading,
     // the SDK transparently falls back to Gemini in the cloud with the same contract.
-    scanModel = getGenerativeModel(ai, {
-      mode: InferenceMode.PREFER_ON_DEVICE,
-      onDeviceParams: {
-        createOptions: {
-          expectedInputs: [{ type: 'text', languages: ['en'] }],
-          expectedOutputs: [{ type: 'text', languages: ['en'] }],
-          initialPrompts: [{ role: 'system', content: [{ type: 'text', value: instruction }] }],
-        },
-        promptOptions: { responseConstraint: schema },
+    const onDeviceParams = {
+      createOptions: {
+        expectedInputs: [{ type: 'text' as const, languages: ['en'] }],
+        expectedOutputs: [{ type: 'text' as const, languages: ['en'] }],
+        initialPrompts: [{ role: 'system' as const, content: [{ type: 'text' as const, value: instruction }] }],
       },
-      inCloudParams: {
-        model: settings.scanCloudModel,
-        systemInstruction: instruction,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseJsonSchema: schema,
-          temperature: 0.1,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
-        },
+      promptOptions: { responseConstraint: schema },
+    };
+    const inCloudParams = {
+      model: settings.scanCloudModel,
+      systemInstruction: instruction,
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseJsonSchema: schema,
+        temperature: 0.1,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
       },
-    });
+    };
+    // Hybrid (web): prefer Gemini Nano on the device; if it is missing or still downloading,
+    // the SDK transparently falls back to Gemini in the cloud with the same JSON contract.
+    scanModel = getGenerativeModel(ai, { mode: InferenceMode.PREFER_ON_DEVICE, onDeviceParams, inCloudParams });
+    // Extension side panel: strictly on-device; cloud work goes through the attested bridge.
+    deviceScanModel = getGenerativeModel(ai, { mode: InferenceMode.ONLY_ON_DEVICE, onDeviceParams, inCloudParams });
+    // Bridge: cloud-only scan used when the extension has no on-device model.
+    cloudScanModel = getGenerativeModel(ai, { mode: InferenceMode.ONLY_IN_CLOUD, inCloudParams });
     // Deep analysis is cloud-only by design and runs only after explicit consent.
     deepModel = getGenerativeModel(ai, {
       mode: InferenceMode.ONLY_IN_CLOUD,
@@ -219,6 +225,8 @@ interface RawFinding {
 }
 
 export interface ScanOptions {
+  /** hybrid: prefer on-device, fall back to cloud. device: on-device only. cloud: cloud only. */
+  mode?: 'hybrid' | 'device' | 'cloud';
   onProgress?: (p: ScanProgress, partial: Finding[]) => void;
   signal?: AbortSignal;
   debugToken?: string;
@@ -241,7 +249,8 @@ export async function scanDocument(text: string, opts: ScanOptions = {}): Promis
     let raw: RawFinding[] = [];
     try {
       const prompt = `Fragment ${i + 1} of ${chunks.length}:\n"""\n${chunk}\n"""`;
-      const res = await withCloudRetry(() => scanModel!.generateContent(prompt));
+      const model = opts.mode === 'device' ? deviceScanModel! : opts.mode === 'cloud' ? cloudScanModel! : scanModel!;
+      const res = await withCloudRetry(() => model.generateContent(prompt));
       source = (res.response.inferenceSource as Source) ?? 'in_cloud';
       const parsed = parseJson<{ findings?: RawFinding[] }>(res.response.text());
       raw = parsed?.findings ?? [];

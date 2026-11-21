@@ -1,6 +1,7 @@
 import '../src/ui/styles.css';
 import { mountApp, type DocumentSource } from '../src/ui/app.ts';
 import type { Finding } from '../src/core/types.ts';
+import { CloudBridge } from './bridge-client.ts';
 
 async function activeTab(): Promise<chrome.tabs.Tab> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -43,40 +44,10 @@ const source: DocumentSource = {
   },
 };
 
-async function getDebugToken(): Promise<string | undefined> {
-  const { appCheckDebugToken } = await chrome.storage.local.get('appCheckDebugToken');
-  return (appCheckDebugToken as string | undefined) || undefined;
-}
-
-function mountSettings(root: HTMLElement) {
-  const header = root.querySelector('.fp-header');
-  if (!header) return;
-  const gear = document.createElement('button');
-  gear.className = 'fp-icon-btn';
-  gear.title = 'Settings';
-  gear.textContent = '⚙';
-  header.append(gear);
-
-  const panel = document.createElement('div');
-  panel.className = 'fp-card fp-settings hidden';
-  panel.innerHTML = `
-    <h3>Settings</h3>
-    <div class="fp-note">Cloud features (fallback and deep analysis) are protected by Firebase App Check.
-    Paste the App Check debug token from the testing instructions to enable them. On-device scanning works without it.</div>
-    <input type="text" placeholder="App Check debug token" style="margin:8px 0" />
-    <div class="fp-row"><button class="fp-btn">Save and reload</button></div>`;
-  const input = panel.querySelector('input')!;
-  getDebugToken().then((t) => (input.value = t ?? ''));
-  panel.querySelector('button')!.addEventListener('click', async () => {
-    await chrome.storage.local.set({ appCheckDebugToken: input.value.trim() });
-    location.reload();
-  });
-  gear.addEventListener('click', () => panel.classList.toggle('hidden'));
-  root.querySelector('.fp-main')?.prepend(panel);
-}
-
 const root = document.getElementById('app')!;
-mountApp({ root, source, getDebugToken }).then(() => mountSettings(root));
+const bridgeUrl = import.meta.env.VITE_BRIDGE_URL as string | undefined;
+const cloud = bridgeUrl ? new CloudBridge(bridgeUrl) : undefined;
+mountApp({ root, source, cloud, scanMode: 'device' });
 
 // Re-describe the document when the user switches tabs.
 chrome.tabs.onActivated.addListener(() => {

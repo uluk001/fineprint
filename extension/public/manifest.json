@@ -2,7 +2,8 @@
   "manifest_version": 3,
   "name": "Fine Print: AI terms & policy checker",
   "short_name": "Fine Print",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm+cNJbdJwBA76z44j46bgggGxUaX9x8eJ2k26YUDc/u68/PSz2o1bxGKV3FQV6rX1Y2mipvnnutMvOmjSYvepx8FuaCGlrCess0ngUDDbzwKsMhyyMgyUv175S1xuII+0fTotxx4r7k8wFU3PduE12l7ryR0EmJd7SCVZun0QZjEgBzv/vUNIGtbGUmHpa/OCiQJcYHkTHLlxV6JNSi8OHQ2DNaPn82Arjidt1dp17LElpBM1nJSWj86kk5sg9RcLYjqthn16x9Bb5f/T4c2hFpHNaj1OWXc+9xUKAUH4myy3O1kTS4cjaEHwuvwa5uhwvcPfbsKqV11h0+D8BsicQIDAQAB",
   "description": "Flags risky clauses in insurance policies, loan agreements and subscription terms. Private on-device AI with optional cloud deep review.",
   "minimum_chrome_version": "139",
   "icons": {
@@ -25,12 +26,24 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["sidePanel", "storage", "scripting", "activeTab", "contextMenus"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "scripting",
+    "activeTab",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ]

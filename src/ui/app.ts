@@ -3,6 +3,7 @@ import { hasCloudAccess, initFirebase } from '../core/firebase.ts';
 import { labelFor } from '../core/categories.ts';
 import { riskScore } from '../core/text.ts';
 import type { Category, DeepReport, Finding, ScanResult } from '../core/types.ts';
+import type { CloudAdapter } from '../core/bridge-protocol.ts';
 
 export interface DocumentSource {
   /** Human-readable name of what is being analyzed (page title, sample name...). */
@@ -19,6 +20,10 @@ export interface AppOptions {
   getDebugToken?: () => Promise<string | undefined>;
   /** Extra content rendered above the scan card (e.g. the web demo's text input). */
   inputSlot?: HTMLElement;
+  /** Cloud access through another channel (the extension uses the attested web bridge). */
+  cloud?: CloudAdapter;
+  /** Local scan mode: 'hybrid' (web) or 'device' (extension, cloud goes through `cloud`). */
+  scanMode?: 'hybrid' | 'device';
 }
 
 const h = <K extends keyof HTMLElementTagNameMap>(
@@ -53,6 +58,8 @@ export async function mountApp(opts: AppOptions): Promise<void> {
   const debugToken = await opts.getDebugToken?.();
   initFirebase({ debugToken });
   getCategories().then((c) => (categories = c));
+  let cloudReady = !opts.cloud && hasCloudAccess();
+  opts.cloud?.available().then((ok) => (cloudReady = ok));
 
   // ---------- layout ----------
   const statusDot = h('span', { class: 'fp-dot' });
@@ -90,7 +97,7 @@ export async function mountApp(opts: AppOptions): Promise<void> {
   );
 
   const errorBox = h('div', { class: 'fp-error hidden' });
-  const cloudOffNote = h('div', { class: 'fp-note fp-card hidden' }, 'Deep cloud analysis is off: add an App Check debug token in Settings to enable it. Everything above ran locally.');
+  const cloudOffNote = h('div', { class: 'fp-note fp-card hidden' }, 'Deep cloud analysis is unavailable right now (no connection to the cloud). Everything above ran locally.');
   const disclaimer = h('div', { class: 'fp-disclaimer' }, 'Fine Print highlights clauses to read carefully. It is not legal or financial advice.');
 
   const main = h('main', { class: 'fp-main' }, statusCard, opts.inputSlot ?? null, scanCard, errorBox, summaryCard, findingsCard, deepCard, cloudOffNote, disclaimer);
@@ -217,21 +224,27 @@ export async function mountApp(opts: AppOptions): Promise<void> {
       await refreshDocName();
       abort = new AbortController();
       progressLabel.textContent = 'Reading the document...';
-      lastScan = await scanDocument(lastText, {
-        signal: abort.signal,
-        debugToken,
-        onProgress: (p, partial) => {
-          bar.style.width = `${Math.round((100 * p.done) / Math.max(1, p.total))}%`;
-          progressLabel.textContent = `Fragment ${p.done} of ${p.total} · ${p.onDevice} on-device · ${p.inCloud} cloud`;
-          renderFindings(partial);
-          source.highlight?.(partial);
-        },
-      });
+      const onProgress = (p: { done: number; total: number; onDevice: number; inCloud: number }, partial: Finding[]) => {
+        bar.style.width = `${Math.round((100 * p.done) / Math.max(1, p.total))}%`;
+        progressLabel.textContent = `Fragment ${p.done} of ${p.total} · ${p.onDevice} on-device · ${p.inCloud} cloud`;
+        renderFindings(partial);
+        source.highlight?.(partial);
+      };
+      const deviceReady = (await deviceModelStatus()) === 'available';
+      if (opts.cloud && !deviceReady) {
+        if (!cloudReady && !(await opts.cloud.available())) {
+          throw new Error('On-device AI is not ready on this computer and the cloud is unreachable. Try again in a minute.');
+        }
+        progressLabel.textContent = 'On-device AI is not ready, scanning with Gemini in the cloud...';
+        lastScan = await opts.cloud.scan(lastText, onProgress);
+      } else {
+        lastScan = await scanDocument(lastText, { signal: abort.signal, debugToken, mode: opts.scanMode ?? 'hybrid', onProgress });
+      }
       renderSummary(lastScan);
       renderFindings(lastScan.findings);
       await source.highlight?.(lastScan.findings);
-      deepCard.classList.toggle('hidden', !hasCloudAccess());
-      cloudOffNote.classList.toggle('hidden', hasCloudAccess());
+      deepCard.classList.toggle('hidden', !cloudReady);
+      cloudOffNote.classList.toggle('hidden', cloudReady);
     } catch (e) {
       showError((e as Error).message || String(e));
     } finally {
@@ -251,11 +264,10 @@ export async function mountApp(opts: AppOptions): Promise<void> {
     deepBtn.disabled = true;
     deepBtn.textContent = 'Asking Gemini in the cloud...';
     try {
-      const report = await deepAnalysis(lastText, lastScan.findings, {
-        scope: scopeFull.checked ? 'full' : 'flagged',
-        redact: redactBox.checked,
-        debugToken,
-      });
+      const deepOpts = { scope: scopeFull.checked ? ('full' as const) : ('flagged' as const), redact: redactBox.checked };
+      const report = opts.cloud
+        ? await opts.cloud.deep(lastText, lastScan.findings, deepOpts)
+        : await deepAnalysis(lastText, lastScan.findings, { ...deepOpts, debugToken });
       renderDeep(report);
     } catch (e) {
       showError(`Deep analysis failed: ${(e as Error).message}`);

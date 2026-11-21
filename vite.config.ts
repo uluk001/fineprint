@@ -1,10 +1,10 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type UserConfig } from 'vite';
 import { resolve } from 'node:path';
 
 // Two targets share one codebase:
 //   --mode extension  -> dist/extension (Chrome MV3 side panel extension)
 //   --mode web        -> dist/web       (hosted demo on Firebase Hosting)
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode }): UserConfig => {
   const isExtension = mode === 'extension';
 
   if (isExtension) {
@@ -44,6 +44,12 @@ export default defineConfig(({ mode }) => {
       outDir: resolve(import.meta.dirname, 'dist/web'),
       emptyOutDir: true,
       target: 'chrome139',
+      rollupOptions: {
+        input: {
+          index: resolve(import.meta.dirname, 'web/index.html'),
+          bridge: resolve(import.meta.dirname, 'web/bridge.html'),
+        },
+      },
     },
   };
 });

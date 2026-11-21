@@ -41,11 +41,12 @@ Live demo: https://uluk001.github.io/fineprint/
 | Page highlighting with the CSS Custom Highlight API (no DOM mutation) | `extension/content.ts` |
 | Side panel + context menu "Check selected terms" | `extension/` |
 | Web demo with sample documents | `web/` |
+| Cloud bridge for the extension (App Check without secrets) | `web/bridge.ts`, `extension/bridge-client.ts` |
 
 ### Firebase products
 
 - **Firebase AI Logic**: hybrid on-device/cloud inference with the Gemini Developer API.
-- **Firebase App Check**: reCAPTCHA Enterprise on the web demo; App Check debug token for the extension (extension pages cannot run reCAPTCHA).
+- **Firebase App Check**: reCAPTCHA Enterprise attestation. Extension pages (`chrome-extension://`) cannot run reCAPTCHA, so the side panel embeds a hidden **cloud bridge** page from the attested web origin (`web/bridge.ts`); it accepts `postMessage` requests only from the pinned extension ID and makes the cloud calls on its behalf. No secrets ship in the extension.
 - **Firebase Remote Config**: the risk taxonomy, chunk size, fragment limit and cloud model names can be changed without shipping a new extension (`remoteconfig.template.json`).
 
 ## Try it
@@ -60,7 +61,7 @@ Live demo: https://uluk001.github.io/fineprint/
 1. Download the latest `fineprint-extension.zip` from Releases, unzip it.
 2. Open `chrome://extensions`, enable Developer mode, click **Load unpacked** and select the folder.
 3. Open any terms of service, policy wording or loan agreement page and click the Fine Print icon.
-4. Optional: paste the App Check debug token from the testing instructions in Settings (⚙) to enable cloud features in the extension.
+4. The side panel scans on-device with Gemini Nano. If Nano is not ready, or when you start a deep analysis, it uses Gemini in the cloud through the cloud bridge, with no setup.
 
 ## Build from source
 
